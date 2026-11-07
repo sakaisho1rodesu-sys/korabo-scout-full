@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         【Chrome用】スカウト統合ツール
 // @namespace    co-llabo.scout-all
-// @version      7.6.0
+// @version      7.7.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -1495,9 +1495,28 @@ window.__SF_EN_BY_TOOL__ = true;
     if(LIST.length) render(); else doRun();
     log('プリセット「'+dispName(name)+'」を読み込みました');
   };
+  /* 社名欄：ページ側のフォーカス制御・キー入力の横取りに負けないようにする */
+  (function(){
+    var inp=q('#sfPreName'); if(!inp) return;
+    try{ inp.setAttribute('autocomplete','off'); inp.removeAttribute('disabled'); inp.removeAttribute('readonly'); }catch(e){}
+    function keep(ev){ if(ev.target===inp) ev.stopImmediatePropagation(); }
+    ['focusin','focusout','focus','blur','keydown','keypress','keyup','beforeinput','input','paste','compositionstart','compositionupdate','compositionend'].forEach(function(t){
+      window.addEventListener(t, keep, true);
+    });
+    inp.addEventListener('mousedown', function(ev){
+      ev.stopPropagation();
+      setTimeout(function(){ if(document.activeElement!==inp){ try{ inp.focus(); }catch(e){} } }, 0);
+    });
+    inp.addEventListener('click', function(ev){ ev.stopPropagation(); });
+  })();
   q('#sfPreSave').onclick=function(){
     var name=(q('#sfPreName').value||'').trim();
-    if(!name){ log('保存する名前を入れてください（社名など）','#c0392b'); q('#sfPreName').focus(); return; }
+    /* 社名欄に入力できないとき（ページ側の入力制限など）は、入力ダイアログで名前を受け取る */
+    if(!name){
+      try{ name=(window.prompt('保存する名前（社名など）を入力してください。同じ名前は上書きします', '')||'').trim(); }catch(e){ name=''; }
+      if(!name){ log('保存する名前を入れてください（社名など）','#c0392b'); return; }
+      q('#sfPreName').value=maskOn()?'':name;
+    }
     var o=loadPresets();
     var exists=!!o[name];
     if(exists && !confirm('「'+name+'」はすでにあります。いまの条件で上書きしますか？')) return;
