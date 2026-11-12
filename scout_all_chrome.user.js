@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         【Chrome用】スカウト統合ツール
 // @namespace    co-llabo.scout-all
-// @version      7.7.0
+// @version      7.8.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -2222,6 +2222,13 @@ window.__SF_EN_BY_TOOL__ = true;
     return i>=0 ? '候補'+(i+1) : '候補';
   }
   var LAST_KEY  = 'enScoutAllLast_v1';   /* モード別の直前設定 */
+  /* v7.9: 直前設定・年齢性別・画面絞り込みの状態は会社ごとに分けて持つ（別の会社へログインし直したとき、前の会社の条件を引きずらない） */
+  var COMP_CACHE='';
+  function compKey(){
+    if(!COMP_CACHE){ try{ COMP_CACHE=normName(pageCompanyName())||''; }catch(e){ COMP_CACHE=''; } }
+    return COMP_CACHE;
+  }
+  function ck(base){ var c=compKey(); return c?(base+'@'+c):base; }
   var MIN_KEY   = 'enScoutAllMin_v1';    /* 最小化状態 */
   function qsa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
 
@@ -2230,7 +2237,7 @@ window.__SF_EN_BY_TOOL__ = true;
   var COND_KEY='enScoutAllCond_v1';
   var COND_IDS={ sb:['sbSex','sbLo','sbHi'], qk:['qkSex','qkLo','qkHi'], fd:['fdSex','fdAmin','fdAmax'] };
   var COND_HOOKS={};
-  function loadCondStore(){ try{ return JSON.parse(localStorage.getItem(COND_KEY)||'null'); }catch(e){ return null; } }
+  function loadCondStore(){ try{ return JSON.parse(localStorage.getItem(ck(COND_KEY))||'null'); }catch(e){ return null; } }
   function readCondFrom(src){
     var ids=COND_IDS[src], g=function(i){ return document.getElementById(i); };
     var a=g(ids[0]), b=g(ids[1]), c=g(ids[2]);
@@ -2254,7 +2261,7 @@ window.__SF_EN_BY_TOOL__ = true;
       if(b) b.value=lo;
       if(d) d.value=hi;
     });
-    try{ localStorage.setItem(COND_KEY, JSON.stringify({sex:sex,lo:lo,hi:hi})); }catch(e){}
+    try{ localStorage.setItem(ck(COND_KEY), JSON.stringify({sex:sex,lo:lo,hi:hi})); }catch(e){}
     updateGoLabel();
   }
   function updateGoLabel(){
@@ -2277,7 +2284,7 @@ window.__SF_EN_BY_TOOL__ = true;
     var ctxT=0; try{ if(mode==='search'){ var cx=currentSearchCtx(); if(cx && cx.ok) ctxT=cx.total; } }catch(e){}
     var st0={pageOnly:true, total:ctxT, matched:r.shown, shown:r.shown, hidden:r.hidden, page:currentPageNo(), preset:(presetSel && presetSel.value)||'', label:label.replace(/\s+/g,'')};
     screenStat(st0);
-    try{ localStorage.setItem('enScoutAllCondScr','1'); }catch(e){}
+    try{ localStorage.setItem(ck('enScoutAllCondScr'),'1'); }catch(e){}
     var rs=document.getElementById('sbResult');
     if(rs){ rs.textContent='絞り込み　'+((presetSel && presetSel.value)?(dispPreset(presetSel.value)+'　'):'')+r.shown+'/'+r.total+'名　'+label.replace(/\s+/g,''); rs.style.color=r.shown?'#0b8a5b':'#c0392b'; }
     condNoteAll('このページの'+r.total+'名のうち、'+label+'の'+r.shown+'名を表示（'+r.hidden+'名を非表示）。');
@@ -2767,20 +2774,25 @@ window.__SF_EN_BY_TOOL__ = true;
       return k?all[k]:null;
     }catch(e){ return null; }
   }
-  function applyConfig(c, name){
+  /* v7.9: テンプレートは「番号と名前の両方が一致」→「名前が一致」→「番号が一致」の順で探す。見つからなければ今の選択を変えない */
+  function applyTpl(c){
+    if(!c || c.template==null || !tplSel) return false;
+    var os=tplSel.options, i, t=c.templateText||'';
+    for(i=0;i<os.length;i++){ if(os[i].value===c.template && (!t || os[i].textContent===t)){ tplSel.selectedIndex=i; return true; } }
+    if(t){ for(i=0;i<os.length;i++){ if(os[i].textContent===t){ tplSel.selectedIndex=i; return true; } } }
+    for(i=0;i<os.length;i++){ if(os[i].value===c.template && c.template!==''){ tplSel.selectedIndex=i; return true; } }
+    return false;
+  }
+  function applyConfig(c, name, quiet){
     if(!c) return;
     if(c.sex==null && name){
       var fc=findCondFor(name);
       if(fc && fc.sex!=null){ c=Object.assign({}, c, {sex:fc.sex, lo:fc.ageMin, hi:fc.ageMax, _fromFind:true}); }
     }
-    if(c.template!=null){
-      tplSel.value=c.template;
-      if(tplSel.value!==c.template && c.templateText){
-        for(var ti=0; ti<tplSel.options.length; ti++){ if(tplSel.options[ti].textContent===c.templateText){ tplSel.selectedIndex=ti; break; } }
-      }
-    }
+    applyTpl(c);
     if(c.count && numIn) numIn.value=c.count;
-    if(c.sex!=null){ setCondEverywhere({sex:c.sex, lo:c.lo, hi:c.hi}); try{ fireCond(); }catch(e){} }
+    if(c.sex!=null){ setCondEverywhere({sex:c.sex, lo:c.lo, hi:c.hi}); if(!quiet){ try{ fireCond(); }catch(e){} } }
+    if(!(c.perks && c.perks.length)) return;   /* v7.9: 特典が保存されていないプリセットでは、今のチェックを外さない */
     var set={}; (c.perks||[]).forEach(function(p){ set[p]=1; });
     qsa('.ensbaPerk', panel).forEach(function(cb){ cb.checked = !!set[cb.value]; });
   }
@@ -2793,8 +2805,13 @@ window.__SF_EN_BY_TOOL__ = true;
     });
   }
   /* ===== 直前設定（モード別に保存） ===== */
-  function loadLastAll(){ try{ return JSON.parse(localStorage.getItem(LAST_KEY)||'{}'); }catch(e){ return {}; } }
-  function loadLast(){ var all=loadLastAll(); return all[mode]||null; }
+  function loadLastAll(){ try{ return JSON.parse(localStorage.getItem(ck(LAST_KEY))||'{}'); }catch(e){ return {}; } }
+  function loadLast(){
+    var all=loadLastAll(), l=all[mode]||null;
+    if(all._preset!=null){ l=Object.assign({}, l||{}, {presetName:all._preset, _own:!!all[mode]}); }
+    else if(l){ l=Object.assign({}, l, {_own:true}); }
+    return l;
+  }
   function saveLast(){
     if(!booted) return;
     try{
@@ -2802,7 +2819,8 @@ window.__SF_EN_BY_TOOL__ = true;
       var c=currentConfig();
       c.presetName=(presetSel && presetSel.value)||'';
       all[mode]=c;
-      localStorage.setItem(LAST_KEY, JSON.stringify(all));
+      all._preset=c.presetName;   /* v7.9: 選択中のプリセットは画面（検索結果／検討人材／送信済）をまたいで共通 */
+      localStorage.setItem(ck(LAST_KEY), JSON.stringify(all));
     }catch(e){}
   }
   /* ===== UI ===== */
@@ -2816,7 +2834,7 @@ window.__SF_EN_BY_TOOL__ = true;
     panel.id='enScoutBulkAllPanel';
     var head=el('div','background:'+M.color+';color:#fff;padding:8px 10px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;cursor:move');
     head.id='ensbaHead';
-    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v7.8');
+    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v7.9');
     title.id='ensbaTitle';
     head.appendChild(title);
     var btns=el('div','display:flex;gap:10px;align-items:center');
@@ -2921,7 +2939,7 @@ window.__SF_EN_BY_TOOL__ = true;
       cb.onchange=function(){ try{ localStorage.setItem('enScoutAllSiteOn', cb.checked?'1':'0'); }catch(e){} };
     },0);
     var saveBtn=el('button','padding:3px 8px;margin-left:4px;cursor:pointer','現状を保存');
-    saveBtn.onclick=function(){ var name=prompt('プリセット名を入力（同名は上書き）'); if(!name) return; var ps=loadPresets(); ps[name]=currentConfig(); savePresets(ps); refreshPresetList(); presetSel.value=name; saveLast(); };
+    saveBtn.onclick=function(){ var name=prompt('プリセット名を入力（同名は上書き）', presetSel.value||''); if(!name) return; var ps=loadPresets(); ps[name]=currentConfig(); savePresets(ps); refreshPresetList(); presetSel.value=name; saveLast(); };
     rp.appendChild(saveBtn);
     var delBtn=el('button','padding:3px 8px;margin-left:4px;cursor:pointer','削除');
     delBtn.onclick=function(){ if(!presetSel.value) return; if(!confirm('プリセット「'+dispPreset(presetSel.value)+'」を削除しますか？')) return; var ps=loadPresets(); delete ps[presetSel.value]; savePresets(ps); refreshPresetList(); saveLast(); };
@@ -4248,7 +4266,7 @@ window.__SF_EN_BY_TOOL__ = true;
     var rows=(M && M.rows)?M.rows():[];
     rows.forEach(function(row){ row.style.display=''; });
     SCREEN_COND=false;
-    try{ localStorage.setItem('enScoutAllCondScr','0'); }catch(e){}
+    try{ localStorage.setItem(ck('enScoutAllCondScr'),'0'); }catch(e){}
     screenStat(null);
     var rs0=document.getElementById('sbResult'); if(rs0) rs0.textContent='';
     return rows.length;
@@ -5508,15 +5526,26 @@ window.__SF_EN_BY_TOOL__ = true;
     if(mode!=='apply' && !getRows().length){ return setTimeout(boot, 800); }
     buildPanel(); watchNative(); updateCount(); refreshPresetList();
     try{ var cs=loadCondStore(); if(cs) setCondEverywhere(cs); }catch(e){}
+    /* v7.9: この会社（またはこの画面）で初めて開いたときは、社名に合うプリセットを自動で選び、年齢・性別・特典・件数を入れる */
+    var last=loadLast(), autoPreset='';
+    try{
+      var psA=loadPresets(), compA=pageCompanyName();
+      if(last && last.presetName && !last._own && psA[last.presetName]) autoPreset=last.presetName;
+      else if(!last && compA) autoPreset=Object.keys(psA).filter(function(n){ return nameMatches(compA, n)===true; })[0]||'';
+      if(autoPreset){
+        presetSel.value=autoPreset;
+        applyConfig(psA[autoPreset], autoPreset, true);
+        if(psA[autoPreset].sex!=null || findCondFor(autoPreset)) localStorage.setItem(ck('enScoutAllCondScr'),'1');
+      }
+    }catch(e){ autoPreset=''; }
     restoreScreen();   /* v3.3: 保存しておいた画面の絞り込みをかけ直す */
     startHiddenWatch();
-    try{ if(localStorage.getItem('enScoutAllCondScr')==='1' && (mode==='search'||mode==='folder'||mode==='rescout')) setTimeout(function(){ try{ fireCond(); }catch(e){} }, 400); }catch(e){}
+    try{ if(localStorage.getItem(ck('enScoutAllCondScr'))==='1' && (mode==='search'||mode==='folder'||mode==='rescout')) setTimeout(function(){ try{ fireCond(); }catch(e){} }, 400); }catch(e){}
     var titleEl=document.getElementById('ensbaTitle');
-    if(titleEl) titleEl.textContent='エン転職 統合ツール v7.8｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
+    if(titleEl) titleEl.textContent='エン転職 統合ツール v7.9｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
     setMinimized(loadMin());
     hidePanel();
-    var last=loadLast();
-    if(last){
+    if(last && !autoPreset){
       if(last.presetName){
         for(var pi=0;pi<presetSel.options.length;pi++){ if(presetSel.options[pi].value===last.presetName){ presetSel.selectedIndex=pi; break; } }
       }
@@ -5534,15 +5563,19 @@ window.__SF_EN_BY_TOOL__ = true;
       if(!opts.length){ tplSel.innerHTML='<option value="">（取得失敗）</option>'; setStatus('テンプレート取得に失敗しました（'+(why||'原因不明')+'）。「再取得」を押してください。'); booted=true; return; }
       opts.forEach(function(o){ var op=document.createElement('option'); op.value=o.value; op.textContent=o.text; tplSel.appendChild(op); });
       var restored=false;
-      var lastT=loadLast();
-      if(lastT && lastT.template!=null && lastT.template!==''){
+      var lastT=loadLast(), autoNote='';
+      if(autoPreset){
+        var cT=loadPresets()[autoPreset]; autoNote='社名に合わせてプリセット「'+dispPreset(autoPreset)+'」を選びました。'; autoPreset='';
+        if(cT && applyTpl(cT)) restored=true;
+      }
+      if(!restored && lastT && lastT.template!=null && lastT.template!==''){
         for(var k=0;k<tplSel.options.length;k++){ if(tplSel.options[k].value===lastT.template){ tplSel.selectedIndex=k; restored=true; break; } }
       }
       if(!restored){
         for(var i=0;i<tplSel.options.length;i++){ if(tplSel.options[i].value && tplSel.options[i].value!=='0'){ tplSel.selectedIndex=i; break; } }
       }
       booted=true; saveLast(); drawGuard();
-      setStatus(fromCache ? why+'。「再取得」で最新を読み込めます。' : '準備OK。'+(restored?'前回の設定を復元しました。':'テンプレ/特典/件数を選んで「開始」。'));
+      setStatus(fromCache ? why+'。「再取得」で最新を読み込めます。' : '準備OK。'+autoNote+(autoNote?'':restored?'前回の設定を復元しました。':'テンプレ/特典/件数を選んで「開始」。'));
     }
     reloadTemplates=function(){
       setStatus('テンプレート取得中…');
