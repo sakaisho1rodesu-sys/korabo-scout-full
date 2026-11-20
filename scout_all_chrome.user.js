@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール
+// @name         【Chrome用】スカウト統合ツール v7.9
 // @namespace    co-llabo.scout-all
 // @version      7.9.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
