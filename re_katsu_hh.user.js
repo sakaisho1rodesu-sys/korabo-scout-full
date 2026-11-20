@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Re就活 HH文章自動生成 v2.6
+// @name         Re就活 HH文章自動生成 v2.7
 // @namespace    korabo.rekatsu
-// @version      2.6
+// @version      2.7
 // @description  ヘッドハンティング送信ポップアップを開くと、候補者詳細から3欄の文章を自動生成して入力（送信は人が押す）
 // @match        https://re-katsu.jp/*
 // @grant        GM_xmlhttpRequest
@@ -34,7 +34,7 @@
   if (!/mng_sct_headhunting\.aspx/i.test(location.pathname)) {
     if (window.top === window && document.body) {
       const b = document.createElement('div');
-      b.textContent = 'Re就活HH v2.6 稼働中（この画面では何もしません・クリックで消す）';
+      b.textContent = 'Re就活HH v2.7 稼働中（この画面では何もしません・クリックで消す）';
       b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#0b5;color:#fff;font:12px sans-serif;padding:3px 8px;border-radius:4px;opacity:.85;cursor:pointer';
       b.addEventListener('click', () => b.remove());
       document.body.appendChild(b);
@@ -53,7 +53,7 @@
     { key: 'hopePoint', id: 'txtHOPEPOINT', label: '期待' }
   ];
   let busy = true;
-  console.log('[RK] re_katsu_hh v2.6 loaded ' + location.pathname + '');
+  console.log('[RK] re_katsu_hh v2.7 loaded ' + location.pathname + '');
 
   // ---- 画面パネル ----
   const panel = document.createElement('div');
@@ -196,7 +196,7 @@
     sessionStorage.setItem(FLAG, '1');
     btn.click();
     await new Promise((r) => setTimeout(r, 3000)); // 再読込されればここで終わる
-    sessionStorage.removeItem(FLAG);
+    if (!leaving) sessionStorage.removeItem(FLAG); // 再読込中は消さない（再読込後の画面で使う）
   }
 
   // ---- GAS呼び出し ----
@@ -321,14 +321,24 @@
     generate();
   });
 
+  // ポップアップを開いたら自動で生成（テンプレ読み込みで画面が再読込されるときは、再読込後の画面で生成する）
+  let leaving = false;
+  window.addEventListener('beforeunload', () => { leaving = true; });
+  const autoGen = (tries) => {
+    if (leaving) return;
+    if (busy) { if (tries < 20) setTimeout(() => autoGen(tries + 1), 500); return; }
+    console.log('[RK] 自動生成を開始');
+    generate();
+  };
   (async () => {
     try { setSt('テンプレートを確認中…'); await ensureTemplate(); }
-    catch (e) { setSt(String(e.message || e) + '（テンプレートは読み込まずに続けます）', 'warn'); busy = false; return; }
+    catch (e) { setSt(String(e.message || e) + '（テンプレートは読み込まずに続けます）', 'warn'); }
     busy = false;
+    if (leaving) return;
     showCounts();
-    if (!preheaderEl()) console.log('[RK] プリヘッダー欄が見つかりません');
-    else if (!preheaderEl().value) fillPreheader('');
+    const pe = preheaderEl();
+    if (pe && !pe.value) fillPreheader('');
     setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートを読み込みました');
-    generate(); // 自動で生成（やり直しは⟳）
+    setTimeout(() => autoGen(0), 800);
   })();
 })();
