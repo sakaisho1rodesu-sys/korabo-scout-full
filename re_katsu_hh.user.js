@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Re就活 HH文章自動生成 v2.5
+// @name         Re就活 HH文章自動生成 v2.6
 // @namespace    korabo.rekatsu
-// @version      2.5
+// @version      2.6
 // @description  ヘッドハンティング送信ポップアップを開くと、候補者詳細から3欄の文章を自動生成して入力（送信は人が押す）
 // @match        https://re-katsu.jp/*
 // @grant        GM_xmlhttpRequest
@@ -34,7 +34,7 @@
   if (!/mng_sct_headhunting\.aspx/i.test(location.pathname)) {
     if (window.top === window && document.body) {
       const b = document.createElement('div');
-      b.textContent = 'Re就活HH v2.5 稼働中（この画面では何もしません・クリックで消す）';
+      b.textContent = 'Re就活HH v2.6 稼働中（この画面では何もしません・クリックで消す）';
       b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#0b5;color:#fff;font:12px sans-serif;padding:3px 8px;border-radius:4px;opacity:.85;cursor:pointer';
       b.addEventListener('click', () => b.remove());
       document.body.appendChild(b);
@@ -53,16 +53,16 @@
     { key: 'hopePoint', id: 'txtHOPEPOINT', label: '期待' }
   ];
   let busy = true;
-  console.log('[RK] re_katsu_hh v2.5 loaded ' + location.pathname + '');
+  console.log('[RK] re_katsu_hh v2.6 loaded ' + location.pathname + '');
 
   // ---- 画面パネル ----
   const panel = document.createElement('div');
-  panel.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99999;width:300px;background:#fff;border:2px solid #0b5;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);font:13px/1.5 sans-serif;padding:10px;color:#222';
-  panel.innerHTML = '<div style="font-weight:bold">Re就活 HH自動生成 v2.5</div><div style="margin:6px 0"><span id="rk-round" style="display:inline-block;color:#fff;font-weight:bold;padding:2px 10px;border-radius:12px"></span> <button id="rk-sw" type="button" style="padding:2px 8px;margin-left:6px">切替</button></div><div id="rk-st" style="margin:6px 0">準備中…</div><div id="rk-cnt" style="color:#555"></div><div style="margin-top:8px"><button id="rk-re" type="button" style="padding:4px 10px">▶ 生成（再生成）</button></div>';
+  panel.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;display:flex;align-items:center;gap:4px;background:#fff;border:2px solid #0b5;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,.25);font:11px sans-serif;padding:2px 3px;color:#222';
+  panel.innerHTML = '<span id="rk-round" title="クリックで初回／2回目を切替" style="cursor:pointer;color:#fff;font-weight:bold;padding:2px 6px;border-radius:10px"></span><button id="rk-re" type="button" title="生成（再生成）" style="width:24px;height:24px;padding:0;border:0;border-radius:50%;background:#0b5;color:#fff;cursor:pointer;font-size:14px;line-height:24px">⟳</button><span id="rk-st" style="display:none"></span><span id="rk-cnt" style="display:none"></span><button id="rk-sw" type="button" style="display:none"></button>';
   document.body.appendChild(panel);
   function paintRound() {
     const e = panel.querySelector('#rk-round');
-    e.textContent = '【' + ROUND_LABEL[ROUND] + '用】テンプレート';
+    e.textContent = ROUND_LABEL[ROUND];
     e.style.background = ROUND_COLOR[ROUND];
   }
   paintRound();
@@ -74,7 +74,7 @@
     tg.forEach((el) => { if (el) el.style.background = (kind === 'ok') ? '#e9f9ef' : ''; });
   }
   paintState('idle');
-  const setSt = (m, ng) => { const e = panel.querySelector('#rk-st'); e.textContent = m; e.style.color = ng === 'warn' ? '#b26a00' : (ng ? '#c00' : '#222'); };
+  const setSt = (m, ng) => { panel.querySelector('#rk-st').textContent = m; panel.title = m; if (ng) console.log('[RK] ' + m); };
 
   // ---- 文字数（全角=1 / 半角=0.5） ----
   const weight = (s) => { let n = 0; for (const ch of String(s || '')) { const c = ch.charCodeAt(0); n += (c <= 0x7e || (c >= 0xff61 && c <= 0xff9f)) ? 0.5 : 1; } return n; };
@@ -111,9 +111,12 @@
     let base = String(fixed || '').trim();
     let t;
     if (base) {
-      const h = String(hook || '').replace(/^【|】$/g, '').trim();
+      let h = String(hook || '').replace(/^【|】$/g, '').replace(/[。！!]+$/, '').trim();
+      const noun = h.replace(/(を|が|に)?(魅力に感じました|活かせると感じました|惹かれました|印象的でした)$/, '').trim();
+      h = noun ? noun + 'に惹かれました！' : h;
       const room = PH_MAX - weight(base.replace('{{HOOK}}', '')) - (/\{\{HOOK\}\}/.test(base) ? 0 : 2);
       let hh = h;
+      if (weight(hh) > room) hh = noun; // 収まらなければ名詞だけ
       while (hh && weight(hh) > room) hh = hh.slice(0, -1);
       if (room < 4) hh = '';
       t = /\{\{HOOK\}\}/.test(base) ? base.split('{{HOOK}}').join(hh) : (hh ? base + '【' + hh + '】' : base);
@@ -234,13 +237,13 @@
   let workTimer = null;
   function startWork() {
     const b = panel.querySelector('#rk-re'), t0 = Date.now();
-    b.disabled = true; b.textContent = '⏳ 生成中…';
+    b.disabled = true; b.textContent = '⏳';
     const tick = () => setSt('⏳ AIが文章を作成中です（' + Math.floor((Date.now() - t0) / 1000) + '秒）。通常10〜40秒かかります。この間は送信ボタンを止めています');
     tick(); workTimer = setInterval(tick, 1000);
   }
   function stopWork() {
     if (workTimer) { clearInterval(workTimer); workTimer = null; }
-    const b = panel.querySelector('#rk-re'); b.disabled = false; b.textContent = '▶ 生成（再生成）';
+    const b = panel.querySelector('#rk-re'); b.disabled = false; b.textContent = '⟳';
   }
 
   async function generate() {
@@ -306,6 +309,7 @@
   }, true);
   FIELDS.forEach((f) => { const el = $(f.id); if (el) el.addEventListener('input', showCounts); });
   panel.querySelector('#rk-re').addEventListener('click', () => { if (!busy) generate(); });
+  panel.querySelector('#rk-round').addEventListener('click', () => panel.querySelector('#rk-sw').click());
   panel.querySelector('#rk-sw').addEventListener('click', async () => {
     if (busy) return;
     busy = true;
@@ -313,7 +317,8 @@
     try { setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートに切り替え中…'); await ensureTemplate(); }
     catch (e) { setSt(String(e.message || e), true); paintState('ng'); busy = false; return; }
     busy = false; showCounts();
-    setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートを読み込みました。「▶ 生成」で3欄をAIで作り直します');
+    setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートを読み込みました');
+    generate();
   });
 
   (async () => {
@@ -323,6 +328,7 @@
     showCounts();
     if (!preheaderEl()) console.log('[RK] プリヘッダー欄が見つかりません');
     else if (!preheaderEl().value) fillPreheader('');
-    setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートを読み込みました。違う場合は「切替」を押してください。内容を確認して「▶ 生成」を押すと、3欄をAIで作り直します');
+    setSt('【' + ROUND_LABEL[ROUND] + '用】テンプレートを読み込みました');
+    generate(); // 自動で生成（やり直しは⟳）
   })();
 })();
