@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Re就活 HH文章自動生成 v2.3
+// @name         Re就活 HH文章自動生成 v2.4
 // @namespace    korabo.rekatsu
-// @version      2.3
+// @version      2.4
 // @description  ヘッドハンティング送信ポップアップを開くと、候補者詳細から3欄の文章を自動生成して入力（送信は人が押す）
 // @match        https://re-katsu.jp/*
 // @grant        GM_xmlhttpRequest
@@ -33,7 +33,7 @@
   if (!/mng_sct_headhunting\.aspx/i.test(location.pathname)) {
     if (window.top === window && document.body) {
       const b = document.createElement('div');
-      b.textContent = 'Re就活HH v2.3 稼働中（この画面では何もしません・クリックで消す）';
+      b.textContent = 'Re就活HH v2.4 稼働中（この画面では何もしません・クリックで消す）';
       b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#0b5;color:#fff;font:12px sans-serif;padding:3px 8px;border-radius:4px;opacity:.85;cursor:pointer';
       b.addEventListener('click', () => b.remove());
       document.body.appendChild(b);
@@ -52,12 +52,12 @@
     { key: 'hopePoint', id: 'txtHOPEPOINT', label: '期待' }
   ];
   let busy = true;
-  console.log('[RK] re_katsu_hh v2.3 loaded ' + location.pathname + '');
+  console.log('[RK] re_katsu_hh v2.4 loaded ' + location.pathname + '');
 
   // ---- 画面パネル ----
   const panel = document.createElement('div');
   panel.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99999;width:300px;background:#fff;border:2px solid #0b5;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);font:13px/1.5 sans-serif;padding:10px;color:#222';
-  panel.innerHTML = '<div style="font-weight:bold">Re就活 HH自動生成 v2.3</div><div style="margin:6px 0"><span id="rk-round" style="display:inline-block;color:#fff;font-weight:bold;padding:2px 10px;border-radius:12px"></span> <button id="rk-sw" type="button" style="padding:2px 8px;margin-left:6px">切替</button></div><div id="rk-st" style="margin:6px 0">準備中…</div><div id="rk-cnt" style="color:#555"></div><div style="margin-top:8px"><button id="rk-re" type="button" style="padding:4px 10px">▶ 生成（再生成）</button></div>';
+  panel.innerHTML = '<div style="font-weight:bold">Re就活 HH自動生成 v2.4</div><div style="margin:6px 0"><span id="rk-round" style="display:inline-block;color:#fff;font-weight:bold;padding:2px 10px;border-radius:12px"></span> <button id="rk-sw" type="button" style="padding:2px 8px;margin-left:6px">切替</button></div><div id="rk-st" style="margin:6px 0">準備中…</div><div id="rk-cnt" style="color:#555"></div><div style="margin-top:8px"><button id="rk-re" type="button" style="padding:4px 10px">▶ 生成（再生成）</button></div>';
   document.body.appendChild(panel);
   function paintRound() {
     const e = panel.querySelector('#rk-round');
@@ -85,18 +85,14 @@
 
   // ---- メールプリヘッダー（受信一覧で件名の横に見える一文）を本文から抽出して入れる ----
   function preheaderEl() {
-    const byId = [...document.querySelectorAll('input[id],textarea[id]')].find((e) => /PRE_?HEAD|HEADER/i.test(e.id) && !/SUBJECT|BODY/i.test(e.id));
+    const skip = new RegExp('^' + P + '(' + BODY_ID + '|txtSUBJECT|txtRESUMEPOINT|txtPRPOINT|txtHOPEPOINT)$');
+    const fields = [...document.querySelectorAll('input[type=text],input:not([type]),textarea')].filter((e) => !skip.test(e.id) && e.offsetParent !== null);
+    const byId = fields.find((e) => /PRE_?HEAD|HEADER|PREVIEW/i.test(e.id + ' ' + (e.name || '')));
     if (byId) return byId;
-    const lab = [...document.querySelectorAll('th,td,label,span,div')].find((e) => e.children.length < 3 && /プ[リレ]ヘッダ/.test(e.textContent || '') && (e.textContent || '').length < 30);
+    const labs = [...document.querySelectorAll('th,td,label,span,div,p,dt,b,strong')].filter((e) => /プ[リレ]ヘッダ/.test(e.textContent || '') && (e.textContent || '').length < 40);
+    const lab = labs[labs.length - 1]; // いちばん内側の見出し
     if (!lab) return null;
-    let n = lab;
-    for (let i = 0; i < 4 && n; i++, n = n.parentElement) {
-      const f = n.querySelector('input[type=text],input:not([type]),textarea');
-      if (f && f.id !== P + BODY_ID) return f;
-      const sib = n.nextElementSibling && n.nextElementSibling.querySelector('input[type=text],input:not([type]),textarea');
-      if (sib) return sib;
-    }
-    return null;
+    return fields.find((f) => lab.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING) || null;
   }
   function extractPreheader(opening, body) {
     const greet = /^(.{0,30}様|お世話|はじめまして|初めまして|突然|株式会社|この度|こんにちは|ご連絡|再度|先日|[-─━=＝■◆●【])/;
@@ -107,18 +103,26 @@
     }
     return src.replace(/\s+/g, ' ').split(/(?<=。)/)[0].replace(/。$/, '');
   }
-  function fillPreheader(opening, fixed) {
+  function fillPreheader(opening, fixed, hook) {
     const el = preheaderEl();
-    if (!el) return '';
+    if (!el) { console.log('[RK] プレヘッダー欄が見つかりません'); return ''; }
     const bd = $(BODY_ID);
-    let t = String(fixed || '').trim() || extractPreheader(opening, bd ? bd.value : '');
+    let base = String(fixed || '').trim();
+    let t;
+    if (base) {
+      const h = String(hook || '').replace(/^【|】$/g, '').trim();
+      t = /\{\{HOOK\}\}/.test(base) ? base.split('{{HOOK}}').join(h) : (h ? base + '【' + h + '】' : base);
+      t = t.replace(/【】/g, '');
+    } else t = extractPreheader(opening, bd ? bd.value : '');
     if (!t) return '';
     const max = Number(el.getAttribute('maxlength')) || 0;
-    if (max && t.length > max) t = t.slice(0, max - 1) + '…';
+    if (max > 0 && t.length > max) t = t.slice(0, max);
     el.value = t;
     ['input', 'keyup', 'change'].forEach((n) => el.dispatchEvent(new Event(n, { bubbles: true })));
+    console.log('[RK] プレヘッダー欄 id=' + el.id + ' に入力');
     return t;
   }
+
 
   // ---- 候補者詳細（開いた元のモーダル）から本文を取る ----
   const textOf = (d) => { try { return d && d.body ? d.body.innerText : ''; } catch (e) { return ''; } };
@@ -267,12 +271,12 @@
         setVal(BODY_ID, r.body);
         FIELDS.forEach((f) => { if (r[f.key]) setVal(f.id, r[f.key]); });
         if (r.subject && $('txtSUBJECT')) setVal('txtSUBJECT', r.subject);
-        const ph = fillPreheader(r.opening, r.preheader);
+        const ph = fillPreheader(r.opening, r.preheader, r.hook);
         const okF = showCounts();
         const c = r.counts || [];
         panel.querySelector('#rk-cnt').textContent = '冒頭 ' + Math.round(c[0] || 0) + '字 ｜ 所感 ' + Math.round(c[1] || 0) + '字 ｜ 本文全体 ' + Math.round(c[2] || 0) + '/3000 ｜ 件名 ' + Math.round(c[6] || 0) + '/50 ｜ 3欄 ' + Math.round(c[3] || 0) + '・' + Math.round(c[4] || 0) + '・' + Math.round(c[5] || 0) + '/200';
         paintState(okF ? 'ok' : 'warn');
-        setSt('✓ 完了：件名・' + (ph ? 'プリヘッダー・' : '') + '本文（冒頭の一言・所感）・3欄（職務経歴書・自己PR・期待）を入力しました。内容を確認して送信してください');
+        setSt('✓ 完了：件名・' + (ph ? 'プレヘッダー・' : '（プレヘッダー欄が見つからず未入力）') + '本文（冒頭の一言・所感）・3欄（職務経歴書・自己PR・期待）を入力しました。内容を確認して送信してください');
         return;
       }
       FIELDS.forEach((f) => setVal(f.id, r[f.key] || ''));
