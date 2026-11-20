@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Re就活 HH文章自動生成 v2.4
+// @name         Re就活 HH文章自動生成 v2.5
 // @namespace    korabo.rekatsu
-// @version      2.4
+// @version      2.5
 // @description  ヘッドハンティング送信ポップアップを開くと、候補者詳細から3欄の文章を自動生成して入力（送信は人が押す）
 // @match        https://re-katsu.jp/*
 // @grant        GM_xmlhttpRequest
@@ -26,14 +26,15 @@
   const ROUND_LABEL = { 1: '初回', 2: '2回目' };
   const ROUND_COLOR = { 1: '#1a6fd1', 2: '#8a3fc4' };
   let ROUND = Number(GM_getValue('rk_round', 1)) === 2 ? 2 : 1; // 最後に選んだ方を覚えている
-  const LIMIT = 200; // 画面上限（全角換算）
+  const LIMIT = 200;
+  const PH_MAX = 50; // メールプリヘッダーの上限（全角50字） // 画面上限（全角換算）
   // =====================================
 
   // ポップアップ以外のRe就活画面では、動作確認用の小さな表示だけ出して終わる（クリックで消える）
   if (!/mng_sct_headhunting\.aspx/i.test(location.pathname)) {
     if (window.top === window && document.body) {
       const b = document.createElement('div');
-      b.textContent = 'Re就活HH v2.4 稼働中（この画面では何もしません・クリックで消す）';
+      b.textContent = 'Re就活HH v2.5 稼働中（この画面では何もしません・クリックで消す）';
       b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#0b5;color:#fff;font:12px sans-serif;padding:3px 8px;border-radius:4px;opacity:.85;cursor:pointer';
       b.addEventListener('click', () => b.remove());
       document.body.appendChild(b);
@@ -52,12 +53,12 @@
     { key: 'hopePoint', id: 'txtHOPEPOINT', label: '期待' }
   ];
   let busy = true;
-  console.log('[RK] re_katsu_hh v2.4 loaded ' + location.pathname + '');
+  console.log('[RK] re_katsu_hh v2.5 loaded ' + location.pathname + '');
 
   // ---- 画面パネル ----
   const panel = document.createElement('div');
   panel.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99999;width:300px;background:#fff;border:2px solid #0b5;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);font:13px/1.5 sans-serif;padding:10px;color:#222';
-  panel.innerHTML = '<div style="font-weight:bold">Re就活 HH自動生成 v2.4</div><div style="margin:6px 0"><span id="rk-round" style="display:inline-block;color:#fff;font-weight:bold;padding:2px 10px;border-radius:12px"></span> <button id="rk-sw" type="button" style="padding:2px 8px;margin-left:6px">切替</button></div><div id="rk-st" style="margin:6px 0">準備中…</div><div id="rk-cnt" style="color:#555"></div><div style="margin-top:8px"><button id="rk-re" type="button" style="padding:4px 10px">▶ 生成（再生成）</button></div>';
+  panel.innerHTML = '<div style="font-weight:bold">Re就活 HH自動生成 v2.5</div><div style="margin:6px 0"><span id="rk-round" style="display:inline-block;color:#fff;font-weight:bold;padding:2px 10px;border-radius:12px"></span> <button id="rk-sw" type="button" style="padding:2px 8px;margin-left:6px">切替</button></div><div id="rk-st" style="margin:6px 0">準備中…</div><div id="rk-cnt" style="color:#555"></div><div style="margin-top:8px"><button id="rk-re" type="button" style="padding:4px 10px">▶ 生成（再生成）</button></div>';
   document.body.appendChild(panel);
   function paintRound() {
     const e = panel.querySelector('#rk-round');
@@ -86,7 +87,7 @@
   // ---- メールプリヘッダー（受信一覧で件名の横に見える一文）を本文から抽出して入れる ----
   function preheaderEl() {
     const skip = new RegExp('^' + P + '(' + BODY_ID + '|txtSUBJECT|txtRESUMEPOINT|txtPRPOINT|txtHOPEPOINT)$');
-    const fields = [...document.querySelectorAll('input[type=text],input:not([type]),textarea')].filter((e) => !skip.test(e.id) && e.offsetParent !== null);
+    const fields = [...document.querySelectorAll('input[type=text],input:not([type]),textarea')].filter((e) => !skip.test(e.id) && e.offsetParent !== null && !e.readOnly && !e.disabled && e.offsetWidth >= 120);
     const byId = fields.find((e) => /PRE_?HEAD|HEADER|PREVIEW/i.test(e.id + ' ' + (e.name || '')));
     if (byId) return byId;
     const labs = [...document.querySelectorAll('th,td,label,span,div,p,dt,b,strong')].filter((e) => /プ[リレ]ヘッダ/.test(e.textContent || '') && (e.textContent || '').length < 40);
@@ -111,12 +112,17 @@
     let t;
     if (base) {
       const h = String(hook || '').replace(/^【|】$/g, '').trim();
-      t = /\{\{HOOK\}\}/.test(base) ? base.split('{{HOOK}}').join(h) : (h ? base + '【' + h + '】' : base);
+      const room = PH_MAX - weight(base.replace('{{HOOK}}', '')) - (/\{\{HOOK\}\}/.test(base) ? 0 : 2);
+      let hh = h;
+      while (hh && weight(hh) > room) hh = hh.slice(0, -1);
+      if (room < 4) hh = '';
+      t = /\{\{HOOK\}\}/.test(base) ? base.split('{{HOOK}}').join(hh) : (hh ? base + '【' + hh + '】' : base);
       t = t.replace(/【】/g, '');
     } else t = extractPreheader(opening, bd ? bd.value : '');
     if (!t) return '';
     const max = Number(el.getAttribute('maxlength')) || 0;
     if (max > 0 && t.length > max) t = t.slice(0, max);
+    while (weight(t) > PH_MAX) t = t.slice(0, -1);
     el.value = t;
     ['input', 'keyup', 'change'].forEach((n) => el.dispatchEvent(new Event(n, { bubbles: true })));
     console.log('[RK] プレヘッダー欄 id=' + el.id + ' に入力');
