@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール v8.0
+// @name         【Chrome用】スカウト統合ツール v8.1
 // @namespace    co-llabo.scout-all
-// @version      8.0.0
+// @version      8.1.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -32,7 +32,7 @@ window.__SF_EN_BY_TOOL__ = true;
 (function(){
   "use strict";
   if(window.__SCOUT_FILTER__){ console.warn('[スカウト絞り込み] すでに起動しています'); return; }
-  window.__SCOUT_FILTER__='7.8';
+  window.__SCOUT_FILTER__='7.9';
   /* ===== v6.1：マイナビ専用の付属機能（メール確認画面の余剰除去） =====
      配信の確認画面（ctsn_setMailView_form）では、選んだ人以外のチェックを外して件数を合わせる。
      選んだ人の記録は、一覧側が localStorage（_mn_sel_<chkcd>）へ残したものを使う。 */
@@ -776,7 +776,8 @@ window.__SF_EN_BY_TOOL__ = true;
           : /(^|\.)doda\.jp$/.test(HOST)          ? makeADP_doda()
           : null;
   /* エン転職（/company/）は、同じファイルの後半にある「エン統合ツール」が担当する */
-  if(window.__SF_EN_BY_TOOL__ && ADP && ADP.site==='en') return;
+  /* v8.1: 会ってみたい（interest_list）は統合ツール側が動かない画面なので、絞り込みパネルを出す */
+  if(window.__SF_EN_BY_TOOL__ && ADP && ADP.site==='en' && !/\/interest_list\//.test(location.pathname)) return;
   if(!ADP || ADP.abort) return;
 
   /* =========================================================
@@ -834,7 +835,7 @@ window.__SF_EN_BY_TOOL__ = true;
   }
 
   /* ---------- 状態 ---------- */
-  var VER='7.8';   /* build.py が差し込む */
+  var VER='7.9';   /* build.py が差し込む */
   var LAST_KEY='scoutFilterCond_'+ADP.site;
   var LIST=[], VIEW=[], logEl=null, panel=null;
 
