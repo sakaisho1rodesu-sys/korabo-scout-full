@@ -1,13 +1,14 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール v7.9
+// @name         【Chrome用】スカウト統合ツール v8.0
 // @namespace    co-llabo.scout-all
-// @version      7.9.0
+// @version      8.0.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
 // @author       こらぼ
 // @match        https://employment.en-japan.com/company/scout/search_result_list/*
 // @match        https://employment.en-japan.com/company/scout/folder_list/*
+// @match        https://employment.en-japan.com/company/scout/interest_list/*
 // @match        https://employment.en-japan.com/company/scout/scout_list/*
 // @match        https://employment.en-japan.com/company/apply/list/*
 // @match        https://employment.en-japan.com/company/appcontrol/*
@@ -31,7 +32,7 @@ window.__SF_EN_BY_TOOL__ = true;
 (function(){
   "use strict";
   if(window.__SCOUT_FILTER__){ console.warn('[スカウト絞り込み] すでに起動しています'); return; }
-  window.__SCOUT_FILTER__='7.7';
+  window.__SCOUT_FILTER__='7.8';
   /* ===== v6.1：マイナビ専用の付属機能（メール確認画面の余剰除去） =====
      配信の確認画面（ctsn_setMailView_form）では、選んだ人以外のチェックを外して件数を合わせる。
      選んだ人の記録は、一覧側が localStorage（_mn_sel_<chkcd>）へ残したものを使う。 */
@@ -120,7 +121,7 @@ window.__SF_EN_BY_TOOL__ = true;
      ========================================================= */
 
   var EN_PATH=location.pathname;
-  var EN_MODE=/\/folder_list\//.test(EN_PATH) ? 'folder'
+  var EN_MODE=/\/(folder_list|interest_list)\//.test(EN_PATH) ? 'folder'
             : /\/scout_list\//.test(EN_PATH) ? 'sent'
             : /\/search_result_list\//.test(EN_PATH) ? 'search'
             : /\/search_condition_update\//.test(EN_PATH) ? 'cond' : '';
@@ -833,7 +834,7 @@ window.__SF_EN_BY_TOOL__ = true;
   }
 
   /* ---------- 状態 ---------- */
-  var VER='7.7';   /* build.py が差し込む */
+  var VER='7.8';   /* build.py が差し込む */
   var LAST_KEY='scoutFilterCond_'+ADP.site;
   var LIST=[], VIEW=[], logEl=null, panel=null;
 
