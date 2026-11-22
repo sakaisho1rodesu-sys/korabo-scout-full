@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.6
+// @version      1.7
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -101,9 +101,13 @@
     links.forEach(a => {
       const id = new URL(a.getAttribute('href'), BASE).searchParams.get('WorkID');
       if (!id || jobs.has(id)) return;
-      const row = a.closest('tr, li, .item, section') || a.parentElement;
-      if (row && /掲載終了|終了/.test(txt(row)) && row.matches('.disabled, .end, .gray, .grayout, [class*="end"]')) return;
-      jobs.set(id, { workId: id, title: txt(row).slice(0, 60) });
+      // 応募管理トップの table.jobList の1行＝1求人。行の文言に「掲載中」があるものだけを見る
+      // （掲載終了・グレーアウトの求人は数えない。2026-11-22 実機確認）
+      const row = a.closest('tr');
+      const rowText = txt(row);
+      const st = rowText.match(/掲載中|掲載終了|掲載予定|掲載停止/);
+      if (!st || st[0] !== '掲載中') return;
+      jobs.set(id, { workId: id, title: rowText.slice(0, rowText.indexOf(st[0])).trim().slice(0, 60) });
     });
     const outJobs = [], apps = [];
     for (const j of jobs.values()) {
@@ -119,8 +123,6 @@
         if (page === 1) {
           const m = r.doc.body.textContent.match(/全\s*([\d,]+)\s*件/);
           total = m ? Number(m[1].replace(/,/g, '')) : 0;
-          const h = r.doc.querySelector('h1, h2, .jobTitle, .workTitle');
-          if (h && txt(h)) j.title = txt(h).slice(0, 60);
         }
         r.doc.querySelectorAll('table.appList tr.js_applyTr').forEach(tr => {
           const dateT = txt(tr.querySelector('td.date'));
