@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      2.0
+// @version      2.1
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @match        https://employment.en-japan.com/company_login/*
@@ -47,7 +47,8 @@
   // PKはログインのたびに変わるため、会社の見分けには使わない（2026-11-22 実機で確認）
   const ADAPTER = {
     media: 'エン転職',
-    accountKey: () => normName(pageCompanyName(document)),
+    // ログイン画面の社名（フッターの運営会社名など）は読まない。2026-11-22 実機で取り違えを確認
+    accountKey: () => /company_login/.test(location.pathname) ? '' : normName(pageCompanyName(document)),
     collect: () => collect(),
   };
   const mapKey = () => ADAPTER.media + '|' + (ADAPTER.accountKey() || '');
