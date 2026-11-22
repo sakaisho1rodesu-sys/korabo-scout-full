@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         媒体変化チェック（エン転職）
+// @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.1
-// @description  応募管理の件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
+// @version      1.2
+// @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
@@ -10,8 +10,8 @@
 // @grant        GM_registerMenuCommand
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
-// @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/en_media_monitor.user.js
-// @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/en_media_monitor.user.js
+// @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/media_monitor.user.js
+// @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/media_monitor.user.js
 // ==/UserScript==
 (function () {
   'use strict';
