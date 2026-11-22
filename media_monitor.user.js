@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.5
+// @version      1.6
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -34,16 +34,26 @@
   // ---- 媒体ごとの読み取り部分（今後 エン転職ダイレクト・doda・Indeed・マイナビ・求人ボックス を足す） ----
   // accountKey: その媒体で会社を見分ける番号。アカウント名は「媒体|番号」ごとに覚えるので、
   // 同じプロファイルで会社を入れ替えても混ざらない
+  // 画面の「〇〇 管理者：」の直前から社名を取る（スカウトツールの誤送信ガードと同じ方法・実機確認済み）
+  function pageCompanyName(doc) {
+    const t = (doc.body ? doc.body.textContent : '').replace(/\s+/g, ' ');
+    let m = t.match(/([^\s]+)\s*管理者[:：]/);
+    if (m) return m[1];
+    m = t.match(/((?:株式会社|有限会社)[^\s]{1,30}|[^\s]{1,30}(?:株式会社|有限会社))/);
+    return m ? m[1] : '';
+  }
+  const normName = n => (n || '').replace(/株式会社|有限会社|合同会社|\(株\)|（株）|[\s　・\-_/]/g, '');
+  // PKはログインのたびに変わるため、会社の見分けには使わない（2026-11-22 実機で確認）
   const ADAPTER = {
     media: 'エン転職',
-    accountKey: () => PK,
+    accountKey: () => normName(pageCompanyName(document)),
     collect: () => collect(),
   };
   const mapKey = () => ADAPTER.media + '|' + (ADAPTER.accountKey() || '');
   const getAccount = () => (GM_getValue('accounts', {})[mapKey()] || '');
   function askAccount() {
-    if (!ADAPTER.accountKey()) { alert('会社を見分ける番号が取れません。応募管理トップを開いてください'); return ''; }
-    const v = prompt(`この会社のアカウント名を入れてください（例：重谷建設_エン）\n媒体：${ADAPTER.media}　番号：${ADAPTER.accountKey()}`, getAccount());
+    if (!ADAPTER.accountKey()) { alert('画面から社名が読み取れません。応募管理トップを開き直してください'); return ''; }
+    const v = prompt(`この会社のアカウント名を入れてください（例：重谷建設_エン）\n媒体：${ADAPTER.media}　画面の社名：${ADAPTER.accountKey()}`, getAccount());
     if (!v) return '';
     const m = GM_getValue('accounts', {}); m[mapKey()] = v.trim(); GM_setValue('accounts', m);
     return v.trim();
@@ -84,6 +94,8 @@
   async function collect() {
     const top = await get(`${BASE}/company/appcontrol/?PK=${PK}`);
     if (isLoggedOut(top)) return { loggedIn: false };
+    const topName = normName(pageCompanyName(top.doc));
+    if (topName && ADAPTER.accountKey() && topName !== ADAPTER.accountKey()) throw new Error('画面の会社と取得先の会社が違います。画面を読み込み直してください');
     const links = [...top.doc.querySelectorAll('a[href*="applicant_list"]')];
     const jobs = new Map();
     links.forEach(a => {
