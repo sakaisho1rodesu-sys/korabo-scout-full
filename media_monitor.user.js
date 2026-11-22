@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.7
+// @version      1.8
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -88,7 +88,11 @@
     const html = await res.text();
     return { url: res.url, doc: new DOMParser().parseFromString(html, 'text/html'), html };
   }
-  const isLoggedOut = r => /login|logout/i.test(r.url) || !!r.doc.querySelector('input[type="password"]');
+  // ログイン中の管理画面には必ず「〇〇 管理者：」が出る。無ければログアウトとみなす
+  // （エン転職はログアウト後もログイン画面へ飛ばさないことがあるため。2026-11-22 実機で判明）
+  const isLoggedOut = r => /login|logout/i.test(r.url)
+    || !!r.doc.querySelector('input[type="password"]')
+    || !/管理者[:：]/.test(r.doc.body ? r.doc.body.textContent : '');
   const txt = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
 
   async function collect() {
@@ -158,6 +162,8 @@
 
   async function run(slot) {
     let account = getAccount();
+    // 社名が出ていない画面（ログアウト後など）は、このプロファイルで最後に取得できた会社として扱う
+    if (!account && !ADAPTER.accountKey()) account = GM_getValue('lastAccount', '');
     if (!account && slot === '手動') account = askAccount(); // 初めて見る会社なら手動のときだけ聞く
     if (!CFG.GAS_URL || !CFG.SECRET) { show('GASの接続が未設定です（Tampermonkeyメニューから設定）'); return; }
     if (!account) { show('この会社のアカウント名が未設定です（「今すぐ取得」で設定）'); return; }
@@ -167,6 +173,7 @@
       const data = await ADAPTER.collect();
       await send(Object.assign({ secret: CFG.SECRET, media: ADAPTER.media, account, accountKey: ADAPTER.accountKey(), slot }, data));
       GM_setValue('loggedOut', !data.loggedIn);
+      if (data.loggedIn) GM_setValue('lastAccount', account);
       const msg = data.loggedIn ? `${slot} 取得OK（求人${data.jobs.length}件・応募者${data.applicants.length}名）` : `${slot} ログアウトを検知`;
       GM_setValue('lastMsg', account + '｜' + msg + ' ' + new Date().toLocaleTimeString('ja-JP'));
       show(GM_getValue('lastMsg'));
