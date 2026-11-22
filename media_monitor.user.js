@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.3
+// @version      1.4
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -24,13 +24,31 @@
     RELOAD_MIN: 20, // タブを開いたままでも画面を新しくする間隔（分）
   };
   const BASE = 'https://employment.en-japan.com';
-  const PK = new URLSearchParams(location.search).get('PK') || GM_getValue('pk', '');
-  if (PK) GM_setValue('pk', PK);
+  // 会社の番号（PK）は、いま開いている画面から取る。前の会社の番号を使い回さない
+  const pkFromLinks = () => {
+    const a = document.querySelector('a[href*="PK="]');
+    return a ? new URL(a.getAttribute('href'), location.href).searchParams.get('PK') : '';
+  };
+  const PK = new URLSearchParams(location.search).get('PK') || pkFromLinks() || '';
 
-  GM_registerMenuCommand('アカウント名を設定', () => {
-    const v = prompt('このプロファイルのアカウント名（例：重谷建設_エン）', GM_getValue('account', ''));
-    if (v) GM_setValue('account', v.trim());
-  });
+  // ---- 媒体ごとの読み取り部分（今後 エン転職ダイレクト・doda・Indeed・マイナビ・求人ボックス を足す） ----
+  // accountKey: その媒体で会社を見分ける番号。アカウント名は「媒体|番号」ごとに覚えるので、
+  // 同じプロファイルで会社を入れ替えても混ざらない
+  const ADAPTER = {
+    media: 'エン転職',
+    accountKey: () => PK,
+    collect: () => collect(),
+  };
+  const mapKey = () => ADAPTER.media + '|' + (ADAPTER.accountKey() || '');
+  const getAccount = () => (GM_getValue('accounts', {})[mapKey()] || '');
+  function askAccount() {
+    if (!ADAPTER.accountKey()) { alert('会社を見分ける番号が取れません。応募管理トップを開いてください'); return ''; }
+    const v = prompt(`この会社のアカウント名を入れてください（例：重谷建設_エン）\n媒体：${ADAPTER.media}　番号：${ADAPTER.accountKey()}`, getAccount());
+    if (!v) return '';
+    const m = GM_getValue('accounts', {}); m[mapKey()] = v.trim(); GM_setValue('accounts', m);
+    return v.trim();
+  }
+  GM_registerMenuCommand('アカウント名を設定（この会社）', askAccount);
   GM_registerMenuCommand('GASの接続を設定', () => {
     const u = prompt('GASのウェブアプリURL（/exec で終わるもの）', GM_getValue('gasUrl', ''));
     if (u) GM_setValue('gasUrl', u.trim());
@@ -123,17 +141,18 @@
   }
 
   async function run(slot) {
-    const account = GM_getValue('account', '');
+    let account = getAccount();
+    if (!account && slot === '手動') account = askAccount(); // 初めて見る会社なら手動のときだけ聞く
     if (!CFG.GAS_URL || !CFG.SECRET) { show('GASの接続が未設定です（Tampermonkeyメニューから設定）'); return; }
-    if (!account) { show('アカウント名が未設定です（Tampermonkeyメニューから設定）'); return; }
+    if (!account) { show('この会社のアカウント名が未設定です（「今すぐ取得」で設定）'); return; }
     if (!PK) { show('PKが分かりません。応募管理トップを開いてください'); return; }
     show('取得中…');
     try {
-      const data = await collect();
-      await send(Object.assign({ secret: CFG.SECRET, media: 'エン転職', account, slot }, data));
+      const data = await ADAPTER.collect();
+      await send(Object.assign({ secret: CFG.SECRET, media: ADAPTER.media, account, accountKey: ADAPTER.accountKey(), slot }, data));
       GM_setValue('loggedOut', !data.loggedIn);
       const msg = data.loggedIn ? `${slot} 取得OK（求人${data.jobs.length}件・応募者${data.applicants.length}名）` : `${slot} ログアウトを検知`;
-      GM_setValue('lastMsg', msg + ' ' + new Date().toLocaleTimeString('ja-JP'));
+      GM_setValue('lastMsg', account + '｜' + msg + ' ' + new Date().toLocaleTimeString('ja-JP'));
       show(GM_getValue('lastMsg'));
     } catch (e) { show('エラー：' + e); }
   }
