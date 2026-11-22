@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.2
+// @version      1.3
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -41,7 +41,7 @@
   GM_registerMenuCommand('今すぐ取得（テスト）', () => run('手動'));
 
   const badge = document.createElement('div');
-  badge.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;background:#334;color:#fff;font:12px sans-serif;padding:4px 8px;border-radius:4px;opacity:.85';
+  badge.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:8px;z-index:99999;background:#334;color:#fff;font:12px sans-serif;padding:4px 8px;border-radius:4px;opacity:.85';
   const label = document.createElement('span');
   const btn = document.createElement('button');
   btn.textContent = '今すぐ取得';
