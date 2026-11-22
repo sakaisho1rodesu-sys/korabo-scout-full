@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール v8.1
+// @name         【Chrome用】スカウト統合ツール v8.2
 // @namespace    co-llabo.scout-all
-// @version      8.1.0
+// @version      8.2.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -32,7 +32,7 @@ window.__SF_EN_BY_TOOL__ = true;
 (function(){
   "use strict";
   if(window.__SCOUT_FILTER__){ console.warn('[スカウト絞り込み] すでに起動しています'); return; }
-  window.__SCOUT_FILTER__='7.9';
+  window.__SCOUT_FILTER__='7.10';
   /* ===== v6.1：マイナビ専用の付属機能（メール確認画面の余剰除去） =====
      配信の確認画面（ctsn_setMailView_form）では、選んだ人以外のチェックを外して件数を合わせる。
      選んだ人の記録は、一覧側が localStorage（_mn_sel_<chkcd>）へ残したものを使う。 */
@@ -110,7 +110,7 @@ window.__SF_EN_BY_TOOL__ = true;
   /* 年収の読み取り（エン転職・マイナビ共通）。範囲表記（400〜449万円）は下限を採る。読めなければ -1 */
   function salOfText(t){
     t=String(t||'').replace(/\s+/g,' ');
-    var m=t.match(/(?:現在の|直近の|現)?年収\s*[:：]?\s*(\d{2,4})\s*(?:万円)?\s*(?:[～〜~\-－]\s*\d{2,4}\s*)?万円/)
+    var m=t.match(/(?<!希望)(?:現在の|直近の|現)?年収\s*[:：]?\s*(\d{2,4})\s*(?:万円)?\s*(?:[～〜~\-－]\s*\d{2,4}\s*)?万円/)
         ||t.match(/(\d{2,4})\s*万円\s*[\/／]?\s*(?:在職中|離職中|在学中)/);
     return m?parseInt(m[1],10):-1;
   }
@@ -245,7 +245,7 @@ window.__SF_EN_BY_TOOL__ = true;
         gaku:b.gaku||(m?String(m[4]).replace(/年収[\s\S]*$/,'').trim():''),
         lang:b.lang||'',
         scout:-1,
-        sal:salOfText((b.raw||'')+' '+t),
+        sal:salOfText(t),   /* 一覧の行に出ている現年収だけを見る（詳細の希望年収は拾わない） */
         text:((b.raw||'')+' '+t)
       };
     },
@@ -835,7 +835,7 @@ window.__SF_EN_BY_TOOL__ = true;
   }
 
   /* ---------- 状態 ---------- */
-  var VER='7.9';   /* build.py が差し込む */
+  var VER='7.10';   /* build.py が差し込む */
   var LAST_KEY='scoutFilterCond_'+ADP.site;
   var LIST=[], VIEW=[], logEl=null, panel=null;
 
