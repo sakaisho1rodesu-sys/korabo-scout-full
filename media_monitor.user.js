@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.9
+// @version      2.0
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @match        https://employment.en-japan.com/company_login/*
@@ -168,10 +168,12 @@
     if (!account && slot === '手動') account = askAccount(); // 初めて見る会社なら手動のときだけ聞く
     if (!CFG.GAS_URL || !CFG.SECRET) { show('GASの接続が未設定です（Tampermonkeyメニューから設定）'); return; }
     if (!account) { show('この会社のアカウント名が未設定です（「今すぐ取得」で設定）'); return; }
-    if (!PK) { show('PKが分かりません。応募管理トップを開いてください'); return; }
+    const onLogin = /company_login/.test(location.pathname);
+    if (!PK && !onLogin) { show('PKが分かりません。応募管理トップを開いてください'); return; }
     show('取得中…');
     try {
-      const data = await ADAPTER.collect();
+      // ログイン画面が開いているなら、取りに行かずにログアウトとして記録する
+      const data = onLogin ? { loggedIn: false } : await ADAPTER.collect();
       await send(Object.assign({ secret: CFG.SECRET, media: ADAPTER.media, account, accountKey: ADAPTER.accountKey(), slot }, data));
       GM_setValue('loggedOut', !data.loggedIn);
       if (data.loggedIn) GM_setValue('lastAccount', account);
