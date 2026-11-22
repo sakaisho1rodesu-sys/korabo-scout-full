@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.4
+// @version      1.5
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
 // @grant        GM_xmlhttpRequest
@@ -57,6 +57,7 @@
     alert('保存しました。画面を読み込み直すと反映されます');
   });
   GM_registerMenuCommand('今すぐ取得（テスト）', () => run('手動'));
+  GM_registerMenuCommand(`バージョン確認（v${GM_info.script.version}）`, () => alert(`媒体変化チェック v${GM_info.script.version}`));
 
   const badge = document.createElement('div');
   badge.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:8px;z-index:99999;background:#334;color:#fff;font:12px sans-serif;padding:4px 8px;border-radius:4px;opacity:.85';
@@ -67,7 +68,8 @@
   btn.onclick = () => run('手動');
   badge.append(label, btn);
   document.body.appendChild(badge);
-  const show = t => { label.textContent = '変化チェック：' + t; };
+  const VER = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '';
+  const show = t => { label.textContent = `変化チェック v${VER}：` + t; };
   show(GM_getValue('lastMsg', '待機中'));
 
   // ---- 取得 ----
