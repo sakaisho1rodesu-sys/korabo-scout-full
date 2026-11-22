@@ -1,0 +1,172 @@
+// ==UserScript==
+// @name         媒体変化チェック（エン転職）
+// @namespace    korabo-media-monitor
+// @version      1.1
+// @description  応募管理の件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
+// @match        https://employment.en-japan.com/company/appcontrol/*
+// @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
+// @connect      script.google.com
+// @connect      script.googleusercontent.com
+// @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/en_media_monitor.user.js
+// @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/en_media_monitor.user.js
+// ==/UserScript==
+(function () {
+  'use strict';
+  const CFG = {
+    // GASのURLと合言葉は公開ファイルに書かず、メニュー「GASの接続を設定」で各プロファイルに保存する
+    GAS_URL: GM_getValue('gasUrl', ''),
+    SECRET: GM_getValue('secret', ''),
+    SLOTS: ['08:30', '12:00', '17:00'],
+    MAX_PAGES: 30,
+    RELOAD_MIN: 20, // タブを開いたままでも画面を新しくする間隔（分）
+  };
+  const BASE = 'https://employment.en-japan.com';
+  const PK = new URLSearchParams(location.search).get('PK') || GM_getValue('pk', '');
+  if (PK) GM_setValue('pk', PK);
+
+  GM_registerMenuCommand('アカウント名を設定', () => {
+    const v = prompt('このプロファイルのアカウント名（例：重谷建設_エン）', GM_getValue('account', ''));
+    if (v) GM_setValue('account', v.trim());
+  });
+  GM_registerMenuCommand('GASの接続を設定', () => {
+    const u = prompt('GASのウェブアプリURL（/exec で終わるもの）', GM_getValue('gasUrl', ''));
+    if (u) GM_setValue('gasUrl', u.trim());
+    const k = prompt('合言葉（GASと同じ文字列）', GM_getValue('secret', ''));
+    if (k) GM_setValue('secret', k.trim());
+    alert('保存しました。画面を読み込み直すと反映されます');
+  });
+  GM_registerMenuCommand('今すぐ取得（テスト）', () => run('手動'));
+
+  const badge = document.createElement('div');
+  badge.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;background:#334;color:#fff;font:12px sans-serif;padding:4px 8px;border-radius:4px;opacity:.85';
+  const label = document.createElement('span');
+  const btn = document.createElement('button');
+  btn.textContent = '今すぐ取得';
+  btn.style.cssText = 'margin-left:8px;font:12px sans-serif;padding:2px 8px;cursor:pointer';
+  btn.onclick = () => run('手動');
+  badge.append(label, btn);
+  document.body.appendChild(badge);
+  const show = t => { label.textContent = '変化チェック：' + t; };
+  show(GM_getValue('lastMsg', '待機中'));
+
+  // ---- 取得 ----
+  async function get(url) {
+    const res = await fetch(url, { credentials: 'include' });
+    const html = await res.text();
+    return { url: res.url, doc: new DOMParser().parseFromString(html, 'text/html'), html };
+  }
+  const isLoggedOut = r => /login|logout/i.test(r.url) || !!r.doc.querySelector('input[type="password"]');
+  const txt = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+
+  async function collect() {
+    const top = await get(`${BASE}/company/appcontrol/?PK=${PK}`);
+    if (isLoggedOut(top)) return { loggedIn: false };
+    const links = [...top.doc.querySelectorAll('a[href*="applicant_list"]')];
+    const jobs = new Map();
+    links.forEach(a => {
+      const id = new URL(a.getAttribute('href'), BASE).searchParams.get('WorkID');
+      if (!id || jobs.has(id)) return;
+      const row = a.closest('tr, li, .item, section') || a.parentElement;
+      if (row && /掲載終了|終了/.test(txt(row)) && row.matches('.disabled, .end, .gray, .grayout, [class*="end"]')) return;
+      jobs.set(id, { workId: id, title: txt(row).slice(0, 60) });
+    });
+    const outJobs = [], apps = [];
+    for (const j of jobs.values()) {
+      let url = `${BASE}/company/appcontrol/applicant_list/?WorkID=${j.workId}&PK=${PK}`;
+      let total = 0, page = 0;
+      const counts = { scout: 0, meet: 0, normal: 0 };
+      let unacted = 0;
+      const seen = new Set();
+      while (url && page < CFG.MAX_PAGES && !seen.has(url)) {
+        seen.add(url); page++;
+        const r = await get(url);
+        if (isLoggedOut(r)) return { loggedIn: false };
+        if (page === 1) {
+          const m = r.doc.body.textContent.match(/全\s*([\d,]+)\s*件/);
+          total = m ? Number(m[1].replace(/,/g, '')) : 0;
+          const h = r.doc.querySelector('h1, h2, .jobTitle, .workTitle');
+          if (h && txt(h)) j.title = txt(h).slice(0, 60);
+        }
+        r.doc.querySelectorAll('table.appList tr.js_applyTr').forEach(tr => {
+          const dateT = txt(tr.querySelector('td.date'));
+          const nameT = txt(tr.querySelector('td.name'));
+          const prog = txt(tr.querySelector('td.progress'));
+          const dm = dateT.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+          const type = /会ってみたい/.test(dateT) ? '会ってみたい' : /スカウト/.test(dateT) ? 'スカウト' : '通常';
+          counts[type === '会ってみたい' ? 'meet' : type === 'スカウト' ? 'scout' : 'normal']++;
+          const nm = nameT.match(/^(.*?)\s*(男性|女性)?\s*(\d+)歳\s*(.*)$/) || [];
+          // 「--- 評価：--」のままなら未対応
+          const acted = !/^-*\s*評価[:：]\s*-*$/.test(prog);
+          if (!acted) unacted++;
+          apps.push({
+            workId: j.workId, title: j.title,
+            name: (nm[1] || nameT).trim(), gender: nm[2] || '', age: nm[3] || '', area: (nm[4] || '').trim(),
+            date: dm ? `20${dm[1]}/${dm[2]}/${dm[3]}` : dateT, type, acted, progress: prog,
+          });
+        });
+        const next = [...r.doc.querySelectorAll('a')].find(a => /^(次|次へ|次のページ|>)$/.test(txt(a)));
+        url = next ? new URL(next.getAttribute('href'), BASE).href : null;
+      }
+      outJobs.push({ workId: j.workId, title: j.title, total, counts, unacted });
+    }
+    return { loggedIn: true, jobs: outJobs, applicants: apps };
+  }
+
+  function send(payload) {
+    return new Promise((ok, ng) => GM_xmlhttpRequest({
+      method: 'POST', url: CFG.GAS_URL, headers: { 'Content-Type': 'text/plain' },
+      data: JSON.stringify(payload), onload: r => ok(r.responseText), onerror: ng,
+    }));
+  }
+
+  async function run(slot) {
+    const account = GM_getValue('account', '');
+    if (!CFG.GAS_URL || !CFG.SECRET) { show('GASの接続が未設定です（Tampermonkeyメニューから設定）'); return; }
+    if (!account) { show('アカウント名が未設定です（Tampermonkeyメニューから設定）'); return; }
+    if (!PK) { show('PKが分かりません。応募管理トップを開いてください'); return; }
+    show('取得中…');
+    try {
+      const data = await collect();
+      await send(Object.assign({ secret: CFG.SECRET, media: 'エン転職', account, slot }, data));
+      GM_setValue('loggedOut', !data.loggedIn);
+      const msg = data.loggedIn ? `${slot} 取得OK（求人${data.jobs.length}件・応募者${data.applicants.length}名）` : `${slot} ログアウトを検知`;
+      GM_setValue('lastMsg', msg + ' ' + new Date().toLocaleTimeString('ja-JP'));
+      show(GM_getValue('lastMsg'));
+    } catch (e) { show('エラー：' + e); }
+  }
+
+  // ---- 時刻チェック（1分ごと） ----
+  function tick() {
+    const now = new Date();
+    const today = now.toLocaleDateString('sv-SE'); // 日本時間の日付（YYYY-MM-DD）
+    const hm = now.toTimeString().slice(0, 5);
+    const done = GM_getValue('done', {});
+    for (const s of CFG.SLOTS) {
+      const key = today + ' ' + s;
+      if (hm >= s && !done[key] && !CFG.SLOTS.some(x => x > s && hm >= x)) {
+        done[key] = 1;
+        Object.keys(done).forEach(k => { if (!k.startsWith(today)) delete done[k]; });
+        GM_setValue('done', done);
+        run(s);
+        break;
+      }
+    }
+  }
+  // 同じアカウントで複数タブを開いていても1回だけ動くように、最初のタブだけ時刻チェックする
+  const tabId = Math.random().toString(36).slice(2);
+  setInterval(() => {
+    const owner = GM_getValue('owner', null);
+    if (!owner || owner.id === tabId || Date.now() - owner.t > 90000) {
+      GM_setValue('owner', { id: tabId, t: Date.now() });
+      tick();
+    }
+  }, 60000);
+  setTimeout(() => location.reload(), CFG.RELOAD_MIN * 60000);
+  // 前回ログアウトを検知していて、いまログインした画面が開けていれば自動で取り直す
+  if (GM_getValue('loggedOut', false) && !document.querySelector('input[type="password"]') && !/login/i.test(location.href)) {
+    setTimeout(() => run('入り直し後'), 3000);
+  }
+})();
