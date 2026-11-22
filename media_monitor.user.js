@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         媒体変化チェック
 // @namespace    korabo-media-monitor
-// @version      1.8
+// @version      1.9
 // @description  求人媒体（現在はエン転職）の応募件数・応募者を 8:30/12:00/17:00 に読み取りGASへ送る（見るだけ・送信や変更はしない）
 // @match        https://employment.en-japan.com/company/appcontrol/*
+// @match        https://employment.en-japan.com/company_login/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -206,7 +207,13 @@
       tick();
     }
   }, 60000);
-  setTimeout(() => location.reload(), CFG.RELOAD_MIN * 60000);
+  if (!/company_login/.test(location.pathname)) setTimeout(() => location.reload(), CFG.RELOAD_MIN * 60000);
+  // ログイン画面が開いている＝ログアウトしている。まだ記録していなければ、この時点で記録する
+  // （ログアウト後に管理画面を開くとログイン画面へ移るため。2026-11-22 実機で判明）
+  if (/company_login/.test(location.pathname)) {
+    if (!GM_getValue('loggedOut', false) && GM_getValue('lastAccount', '')) setTimeout(() => run('ログアウト検知'), 2000);
+    return; // ログイン画面では自動の再読み込みや取り直しはしない
+  }
   // 前回ログアウトを検知していて、いまログインした画面が開けていれば自動で取り直す
   if (GM_getValue('loggedOut', false) && !document.querySelector('input[type="password"]') && !/login/i.test(location.href)) {
     setTimeout(() => run('入り直し後'), 3000);
