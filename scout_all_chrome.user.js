@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール v8.2
+// @name         【Chrome用】スカウト統合ツール v8.3
 // @namespace    co-llabo.scout-all
-// @version      8.2.0
+// @version      8.3.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -2553,7 +2553,11 @@ window.__SF_EN_BY_TOOL__ = true;
     var btn=document.getElementById('ensbaMinBtn');
     if(body) body.style.display = v ? 'none' : 'block';
     if(btn) btn.textContent = v ? '□' : '―';
-    panel.style.width = v ? '320px' : '680px';
+    /* v8.3: iPadなど画面が狭いときは横幅を画面の半分までに抑える。最小化中はタイトルを1行に */
+    panel.style.width = v ? '300px' : 'min(680px, 50vw)';
+    panel.style.minWidth = v ? '' : '420px';
+    var tt=document.getElementById('ensbaTitle');
+    if(tt){ tt.style.whiteSpace = v ? 'nowrap' : ''; tt.style.overflow = v ? 'hidden' : ''; tt.style.textOverflow = v ? 'ellipsis' : ''; tt.style.maxWidth = v ? '230px' : ''; }
     saveMin(v);
   }
   function isMinimized(){ var b=document.getElementById('ensbaBody'); return !!(b && b.style.display==='none'); }
@@ -2843,11 +2847,11 @@ window.__SF_EN_BY_TOOL__ = true;
   var previewHead, previewGo;
   var pending = [];   /* プレビュー中の送信候補（p.on = 送信対象かどうか） */
   function buildPanel(){
-    panel=el('div','position:fixed;top:10px;right:10px;width:680px;max-height:95vh;overflow:auto;background:#fff;border:2px solid '+M.color+';border-radius:8px;z-index:2147483647;box-shadow:0 4px 18px rgba(0,0,0,.3);font-size:13px;font-family:sans-serif');
+    panel=el('div','position:fixed;top:10px;right:10px;width:min(680px, 50vw);min-width:420px;max-height:95vh;overflow:auto;background:#fff;border:2px solid '+M.color+';border-radius:8px;z-index:2147483647;box-shadow:0 4px 18px rgba(0,0,0,.3);font-size:13px;font-family:sans-serif');
     panel.id='enScoutBulkAllPanel';
     var head=el('div','background:'+M.color+';color:#fff;padding:8px 10px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;cursor:move');
     head.id='ensbaHead';
-    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v7.9');
+    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v8.3');
     title.id='ensbaTitle';
     head.appendChild(title);
     var btns=el('div','display:flex;gap:10px;align-items:center');
@@ -3070,7 +3074,7 @@ window.__SF_EN_BY_TOOL__ = true;
     var launcher=el('div','position:fixed;bottom:16px;right:16px;z-index:2147483646;width:44px;height:44px;border-radius:50%;background:'+M.color+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);user-select:none','✉');
     launcher.id='ensbaLauncher';
     launcher.title='エン転職 一括スカウトを開く（'+M.label+'）';
-    launcher.onclick=function(){ showPanel(); };
+    launcher.onclick=function(){ showPanel(); setMinimized(false); };  /* v8.3: 1回で全体を開く */
     document.body.appendChild(launcher);
     /* ヘッダーをドラッグしてパネルを移動 */
     (function(){
@@ -5555,7 +5559,7 @@ window.__SF_EN_BY_TOOL__ = true;
     startHiddenWatch();
     try{ if(localStorage.getItem(ck('enScoutAllCondScr'))==='1' && (mode==='search'||mode==='folder'||mode==='rescout')) setTimeout(function(){ try{ fireCond(); }catch(e){} }, 400); }catch(e){}
     var titleEl=document.getElementById('ensbaTitle');
-    if(titleEl) titleEl.textContent='エン転職 統合ツール v7.9｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
+    if(titleEl) titleEl.textContent='エン転職 統合ツール v8.3｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
     setMinimized(loadMin());
     hidePanel();
     if(last && !autoPreset){
