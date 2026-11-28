@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         【Chrome用】スカウト統合ツール v8.3
+// @name         【Chrome用】スカウト統合ツール v8.4
 // @namespace    co-llabo.scout-all
-// @version      8.3.0
+// @version      8.4.0
 // @updateURL    https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @downloadURL  https://raw.githubusercontent.com/sakaisho1rodesu-sys/korabo-scout-full/main/scout_all_chrome.user.js
 // @description  エン転職・エン転職ダイレクト・マイナビ転職・dodaダイレクトの絞り込みと、エン転職の候補者抽出・一括スカウト・レポートを1本にまとめた版。EdgeでもChromeでも同じファイルを使う。マイナビは全ページ抽出・配信連携・保存リスト画面・全ページ集計に対応。社名を隠すモードは4媒体共通。
@@ -2559,7 +2559,22 @@ window.__SF_EN_BY_TOOL__ = true;
     var tt=document.getElementById('ensbaTitle');
     if(tt){ tt.style.whiteSpace = v ? 'nowrap' : ''; tt.style.overflow = v ? 'hidden' : ''; tt.style.textOverflow = v ? 'ellipsis' : ''; tt.style.maxWidth = v ? '230px' : ''; }
     saveMin(v);
+    setTimeout(fitInView, 0);
   }
+  /* v8.4: パネルが画面の外にはみ出したら、画面内に戻す（iPadで拡大時に切れて動かせなくなる対策） */
+  function fitInView(){
+    if(!panel || panel.style.display==='none') return;
+    var W=window.innerWidth, H=window.innerHeight, r=panel.getBoundingClientRect();
+    var left=r.left, top=r.top;
+    if(left+r.width>W-6) left=W-r.width-6;
+    if(left<0) left=0;
+    if(top>H-60) top=H-60;
+    if(top<0) top=0;
+    if(panel.style.right!=='auto' && left===r.left && top===r.top){ panel.style.maxHeight=(H-top-10)+'px'; return; }
+    panel.style.left=left+'px'; panel.style.top=top+'px'; panel.style.right='auto';
+    panel.style.maxHeight=(H-top-10)+'px';
+  }
+  window.addEventListener('resize', function(){ fitInView(); });
   function isMinimized(){ var b=document.getElementById('ensbaBody'); return !!(b && b.style.display==='none'); }
   function ensureVisible(){ if(!panel) return; if(panel.style.display==='none') showPanel(); if(isMinimized()) setMinimized(false); }
   /* ===== 行の取得（モード共通インターフェース） ===== */
@@ -2851,7 +2866,7 @@ window.__SF_EN_BY_TOOL__ = true;
     panel.id='enScoutBulkAllPanel';
     var head=el('div','background:'+M.color+';color:#fff;padding:8px 10px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;cursor:move');
     head.id='ensbaHead';
-    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v8.3');
+    var title=el('span','font-size:12px','エン転職 スカウト統合ツール v8.4');
     title.id='ensbaTitle';
     head.appendChild(title);
     var btns=el('div','display:flex;gap:10px;align-items:center');
@@ -3079,19 +3094,25 @@ window.__SF_EN_BY_TOOL__ = true;
     /* ヘッダーをドラッグしてパネルを移動 */
     (function(){
       var dragging=false, sx=0, sy=0, ox=0, oy=0;
-      head.addEventListener('mousedown', function(ev){
+      /* v8.4: 指（iPad）でも動かせるよう pointer イベントに変更。画面の外へは出さない */
+      head.style.touchAction='none';
+      head.addEventListener('pointerdown', function(ev){
         if(ev.target===minBtn || ev.target===close) return;
         dragging=true; sx=ev.clientX; sy=ev.clientY;
         var r=panel.getBoundingClientRect(); ox=r.left; oy=r.top;
         panel.style.left=ox+'px'; panel.style.top=oy+'px'; panel.style.right='auto';
+        try{ head.setPointerCapture(ev.pointerId); }catch(e){}
         ev.preventDefault();
       });
-      document.addEventListener('mousemove', function(ev){
+      document.addEventListener('pointermove', function(ev){
         if(!dragging) return;
-        panel.style.left=Math.max(0,(ox+ev.clientX-sx))+'px';
-        panel.style.top =Math.max(0,(oy+ev.clientY-sy))+'px';
+        var w=panel.offsetWidth;
+        panel.style.left=Math.min(Math.max(0,(ox+ev.clientX-sx)), Math.max(0,window.innerWidth-w))+'px';
+        panel.style.top =Math.min(Math.max(0,(oy+ev.clientY-sy)), window.innerHeight-50)+'px';
       });
-      document.addEventListener('mouseup', function(){ dragging=false; });
+      function endDrag(){ if(dragging){ dragging=false; fitInView(); } }
+      document.addEventListener('pointerup', endDrag);
+      document.addEventListener('pointercancel', endDrag);
     })();
   }
   /* =========================================================
@@ -5559,7 +5580,7 @@ window.__SF_EN_BY_TOOL__ = true;
     startHiddenWatch();
     try{ if(localStorage.getItem(ck('enScoutAllCondScr'))==='1' && (mode==='search'||mode==='folder'||mode==='rescout')) setTimeout(function(){ try{ fireCond(); }catch(e){} }, 400); }catch(e){}
     var titleEl=document.getElementById('ensbaTitle');
-    if(titleEl) titleEl.textContent='エン転職 統合ツール v8.3｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
+    if(titleEl) titleEl.textContent='エン転職 統合ツール v8.4｜'+M.label+'（'+currentPageNo()+'ページ目 / 表示 '+getRows().length+' 件）';
     setMinimized(loadMin());
     hidePanel();
     if(last && !autoPreset){
